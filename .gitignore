@@ -1,0 +1,54 @@
+# Local environment and secrets
+.env
+.env.*
+*.env
+.envrc
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Local Go installations and caches
+/go-toolchain-*/
+/.cache/
+/.gocache/
+/.gopath/
+
+# Go and CGO build artifacts
+*.so
+*.dylib
+*.dll
+*.exe
+*.test
+/axonhub-model-sync
+/axonhub-model-sync.h
+/coverage.out
+*.coverprofile
+*.prof
+*.pprof
+/build/
+/bin/
+/dist/
+
+# Local CLIProxyAPI runtime files
+/cli-proxy-api
+/config.yaml
+/config.local.yaml
+/config.*.local.yaml
+/config_backup/
+/plugins/
+/auths/
+/credentials/
+/secrets/
+
+# Logs, temporary files, and editor state
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+.DS_Store
+Thumbs.db
+/.idea/
+/.vscode/
