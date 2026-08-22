@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PLUGIN_ID: axonhub-model-sync
+
+jobs:
+  release:
+    name: Build and publish Linux amd64 release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Validate release version
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [[ ! "${tag_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "unsupported release tag: ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+          plugin_version="$(sed -nE 's/^[[:space:]]*Version[[:space:]]*=[[:space:]]*"([^"]+)"/\1/p' internal/plugin/service.go)"
+          if [[ "${plugin_version}" != "${tag_version}" ]]; then
+            echo "tag version ${tag_version} does not match plugin version ${plugin_version}" >&2
+            exit 1
+          fi
+
+          echo "RELEASE_VERSION=${tag_version}" >> "${GITHUB_ENV}"
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build plugin package
+        env:
+          CGO_ENABLED: "1"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          package_dir="dist/package"
+          archive="${PLUGIN_ID}_${RELEASE_VERSION}_${GOOS}_${GOARCH}.zip"
+          mkdir -p "${package_dir}"
+
+          go build \
+            -buildmode=c-shared \
+            -trimpath \
+            -ldflags="-s -w" \
+            -o "${package_dir}/${PLUGIN_ID}.so" \
+            ./cmd/axonhub-model-sync
+
+          (
+            cd "${package_dir}"
+            zip -9 "../${archive}" "${PLUGIN_ID}.so"
+          )
+          rm -rf "${package_dir}"
+          (
+            cd dist
+            sha256sum "${archive}" > checksums.txt
+          )
+
+      - name: Verify release assets
+        run: |
+          archive="dist/${PLUGIN_ID}_${RELEASE_VERSION}_linux_amd64.zip"
+          test "$(zipinfo -1 "${archive}")" = "${PLUGIN_ID}.so"
+          (
+            cd dist
+            sha256sum --check checksums.txt
+          )
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "dist/${PLUGIN_ID}_${RELEASE_VERSION}_linux_amd64.zip" \
+            "dist/checksums.txt" \
+            --verify-tag \
+            --generate-notes \
+            --title "${GITHUB_REF_NAME}"

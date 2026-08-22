@@ -83,6 +83,20 @@ exact_overrides:
 
 如果希望两个模型保持独立，应从 CPA 配置中删除这两条覆盖规则。这个行为由配置决定，不需要修改插件代码。
 
+### 自托管插件商店
+
+本仓库根目录的 `registry.json` 可以直接作为 CPA 第三方插件源使用：
+
+```yaml
+plugins:
+  enabled: true
+  dir: plugins
+  store-sources:
+    - https://raw.githubusercontent.com/BeautyQAQ/model-sync-alias/main/registry.json
+```
+
+版本标签（例如 `v1.0.2`）会触发 GitHub Actions，在 GitHub Release 中发布适用于 Linux amd64 的插件 ZIP 和 `checksums.txt`。商店展示版本以最新 GitHub Release 为准；`registry.json` 中的 `version` 仅作为 Release 元数据不可用时的展示回退。
+
 ## 管理 API
 
 所有接口都位于需要身份验证的 CPA 管理 API 下：
