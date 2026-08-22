@@ -53,6 +53,7 @@ regex_overrides:
 	cases := map[string]string{
 		"DeepSeek-V4-Flash-think": "exact-name",
 		"deepseek-v4-pro":         "regex-name",
+		"GLM-5.2-think":           "glm-5.2",
 		"vendor/Model-X":          "Model-X",
 		"raw-model":               "raw-model",
 	}

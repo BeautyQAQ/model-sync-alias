@@ -115,7 +115,7 @@ func pluginRegistration() registration {
 				{Name: "request_timeout", Type: pluginapi.ConfigFieldTypeString, Description: "Timeout for fetching the upstream model catalog."},
 				{Name: "backup_retention", Type: pluginapi.ConfigFieldTypeInteger, Description: "Number of pre-change configuration backups to retain."},
 				{Name: "exact_overrides", Type: pluginapi.ConfigFieldTypeObject, Description: "Exact upstream model ID to canonical alias overrides. An empty value keeps the raw ID."},
-				{Name: "regex_overrides", Type: pluginapi.ConfigFieldTypeArray, Description: "Ordered regular-expression pattern and replacement overrides."},
+				{Name: "regex_overrides", Type: pluginapi.ConfigFieldTypeArray, Description: "Ordered regular-expression pattern and replacement overrides; the first match wins and unmatched IDs use built-in normalization."},
 			},
 		},
 		Capabilities: registrationCapabilities{ManagementAPI: true},
