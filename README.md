@@ -145,13 +145,36 @@ curl -sS -X POST \
 ## 项目结构
 
 ```text
-cmd/axonhub-model-sync/  C ABI 共享库入口
-internal/plugin/        CPA 插件注册、生命周期与管理 API 协议
-internal/syncer/        配置解析、模型归一化、上游读取与安全持久化
-tests/integration/      CPA 进程级测试和显式启用的真实环境检查
+.
+├── cmd/
+│   └── axonhub-model-sync/
+│       └── main.go                    # CGO/C ABI 共享库入口及宿主日志桥接
+├── internal/
+│   ├── plugin/
+│   │   ├── service.go                 # 插件注册、生命周期和管理 API 协议
+│   │   └── service_test.go            # 插件协议层单元测试
+│   └── syncer/
+│       ├── manager.go                 # 定时任务、同步编排及运行状态
+│       ├── settings.go                # 插件配置解析、默认值及校验
+│       ├── source.go                  # CPA 配置读取及上游 /models 请求
+│       ├── normalize.go               # 模型名称归一化和别名生成
+│       ├── diff.go                    # 当前模型与目标模型差异计算
+│       ├── persist.go                 # 配置校验、备份及安全写入
+│       ├── *_test.go                  # 同步核心的白盒单元测试
+│       └── testdata/
+│           └── current_models.golden  # 模型归一化测试基准数据
+├── tests/
+│   └── integration/
+│       ├── integration_test.go        # 独立 CPA 进程端到端测试
+│       ├── live_preview_test.go       # 真实配置的只读同步预览
+│       └── live_catalog_test.go       # 运行中 CPA 模型目录检查
+├── .env.example                       # 本地构建和测试环境变量模板
+├── go.mod                             # Go 模块及直接依赖
+├── go.sum                             # 依赖校验信息
+└── README.md                          # 使用、开发和部署文档
 ```
 
-`internal/syncer` 中的 `*_test.go` 是对应包的白盒单元测试，测试夹具位于该包的 `testdata/`；Go 会自动忽略 `testdata` 目录中的内容，不会将其编译进插件。
+生产代码的依赖方向为 `cmd/axonhub-model-sync → internal/plugin → internal/syncer`。`internal/syncer` 中的 `*_test.go` 是对应包的白盒单元测试，测试夹具位于该包的 `testdata/`；Go 会自动忽略 `testdata` 目录中的内容，不会将其编译进插件。需要 CPA 进程或真实配置的测试统一放在 `tests/integration`，并默认跳过。
 
 ## 构建与验证
 
