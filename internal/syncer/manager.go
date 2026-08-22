@@ -1,4 +1,4 @@
-package main
+package syncer
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	sdkconfig "github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
 )
 
-type syncStatus struct {
+type Status struct {
 	Configured      bool      `json:"configured"`
 	Running         bool      `json:"running"`
 	LastAttempt     time.Time `json:"last_attempt,omitempty"`
@@ -27,17 +27,17 @@ type syncStatus struct {
 	Applied         bool      `json:"applied"`
 }
 
-type previewResult struct {
-	Status syncStatus                           `json:"status"`
-	Diff   modelDiff                            `json:"diff"`
+type Result struct {
+	Status Status                               `json:"status"`
+	Diff   Diff                                 `json:"diff"`
 	Models []sdkconfig.OpenAICompatibilityModel `json:"models"`
 }
 
-type syncManager struct {
+type Manager struct {
 	mu        sync.RWMutex
 	settings  settings
 	hasConfig bool
-	status    syncStatus
+	status    Status
 	cancel    context.CancelFunc
 	done      chan struct{}
 	runMu     sync.Mutex
@@ -46,11 +46,11 @@ type syncManager struct {
 
 const startupSyncDelay = time.Second
 
-func newSyncManager(logger func(level, message string, fields map[string]any)) *syncManager {
-	return &syncManager{log: logger}
+func NewManager(logger func(level, message string, fields map[string]any)) *Manager {
+	return &Manager{log: logger}
 }
 
-func (m *syncManager) configure(raw []byte) error {
+func (m *Manager) Configure(raw []byte) error {
 	cfg, errParse := parseSettings(raw)
 	if errParse != nil {
 		m.stopWorker()
@@ -82,7 +82,7 @@ func (m *syncManager) configure(raw []byte) error {
 	return nil
 }
 
-func (m *syncManager) stopWorker() {
+func (m *Manager) stopWorker() {
 	m.mu.Lock()
 	cancel := m.cancel
 	done := m.done
@@ -100,11 +100,11 @@ func (m *syncManager) stopWorker() {
 	}
 }
 
-func (m *syncManager) shutdown() {
+func (m *Manager) Shutdown() {
 	m.stopWorker()
 }
 
-func (m *syncManager) worker(ctx context.Context, done chan struct{}, cfg settings) {
+func (m *Manager) worker(ctx context.Context, done chan struct{}, cfg settings) {
 	defer close(done)
 	ticker := time.NewTicker(cfg.Interval)
 	defer ticker.Stop()
@@ -118,7 +118,7 @@ func (m *syncManager) worker(ctx context.Context, done chan struct{}, cfg settin
 			}
 			return
 		case <-startupTimer.C:
-			_, _ = m.run(ctx, true, false)
+			_, _ = m.Run(ctx, true, false)
 		}
 	}
 	for {
@@ -127,18 +127,18 @@ func (m *syncManager) worker(ctx context.Context, done chan struct{}, cfg settin
 			return
 		case now := <-ticker.C:
 			m.setNextRun(now.Add(cfg.Interval))
-			_, _ = m.run(ctx, true, false)
+			_, _ = m.Run(ctx, true, false)
 		}
 	}
 }
 
-func (m *syncManager) setNextRun(next time.Time) {
+func (m *Manager) setNextRun(next time.Time) {
 	m.mu.Lock()
 	m.status.NextRun = next
 	m.mu.Unlock()
 }
 
-func (m *syncManager) currentSettings() (settings, error) {
+func (m *Manager) currentSettings() (settings, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if !m.hasConfig {
@@ -147,14 +147,14 @@ func (m *syncManager) currentSettings() (settings, error) {
 	return m.settings, nil
 }
 
-func (m *syncManager) run(ctx context.Context, apply, returnModels bool) (previewResult, error) {
+func (m *Manager) Run(ctx context.Context, apply, returnModels bool) (Result, error) {
 	if !m.runMu.TryLock() {
-		return previewResult{}, fmt.Errorf("a model synchronization is already running")
+		return Result{}, fmt.Errorf("a model synchronization is already running")
 	}
 	defer m.runMu.Unlock()
 	cfg, errSettings := m.currentSettings()
 	if errSettings != nil {
-		return previewResult{}, errSettings
+		return Result{}, errSettings
 	}
 	m.mu.Lock()
 	m.status.Running = true
@@ -170,12 +170,12 @@ func (m *syncManager) run(ctx context.Context, apply, returnModels bool) (previe
 	snapshot, errSnapshot := loadSourceSnapshot(cfg.ConfigPath, cfg.Provider)
 	if errSnapshot != nil {
 		m.recordError(errSnapshot)
-		return previewResult{}, errSnapshot
+		return Result{}, errSnapshot
 	}
 	ids, errFetch := fetchUpstreamModels(ctx, snapshot, cfg.RequestTimeout)
 	if errFetch != nil {
 		m.recordError(errFetch)
-		return previewResult{}, errFetch
+		return Result{}, errFetch
 	}
 	desired := buildDesiredModels(ids, snapshot.Provider.Models, cfg)
 	diff := compareModels(snapshot.Provider.Models, desired)
@@ -184,7 +184,7 @@ func (m *syncManager) run(ctx context.Context, apply, returnModels bool) (previe
 		result, errApply := applyModels(snapshot, ids, cfg)
 		if errApply != nil {
 			m.recordError(errApply)
-			return previewResult{}, errApply
+			return Result{}, errApply
 		}
 		diff = result.Diff
 		applied = result.Applied
@@ -216,14 +216,14 @@ func (m *syncManager) run(ctx context.Context, apply, returnModels bool) (previe
 			"applied":         applied,
 		})
 	}
-	result := previewResult{Status: status, Diff: diff}
+	result := Result{Status: status, Diff: diff}
 	if returnModels {
 		result.Models = desired
 	}
 	return result, nil
 }
 
-func (m *syncManager) recordError(err error) {
+func (m *Manager) recordError(err error) {
 	if err == nil {
 		return
 	}
@@ -239,7 +239,7 @@ func (m *syncManager) recordError(err error) {
 	}
 }
 
-func (m *syncManager) statusSnapshot() syncStatus {
+func (m *Manager) StatusSnapshot() Status {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.status

@@ -142,6 +142,17 @@ curl -sS -X POST \
 - `applied`：本次操作是否实际写入了配置。
 - `last_error`：最近一次同步错误。
 
+## 项目结构
+
+```text
+cmd/axonhub-model-sync/  C ABI 共享库入口
+internal/plugin/        CPA 插件注册、生命周期与管理 API 协议
+internal/syncer/        配置解析、模型归一化、上游读取与安全持久化
+tests/integration/      CPA 进程级测试和显式启用的真实环境检查
+```
+
+`internal/syncer` 中的 `*_test.go` 是对应包的白盒单元测试，测试夹具位于该包的 `testdata/`；Go 会自动忽略 `testdata` 目录中的内容，不会将其编译进插件。
+
 ## 构建与验证
 
 默认使用 `PATH` 中的 `go` 和 `cc`。如果工具链安装在其他位置，可在 `.env` 中配置 `GO_BIN` 和 `CC`：
@@ -161,7 +172,7 @@ CC="$CC" CGO_ENABLED=1 "$GO_BIN" build \
   -trimpath \
   -ldflags=-s \
   -o axonhub-model-sync.so \
-  .
+  ./cmd/axonhub-model-sync
 ```
 
 本地 Go 工具链目录会被 `.gitignore` 排除。建议将工具链安装在仓库外部，避免 `go test ./...`、`go mod tidy` 和编辑器索引误扫描 Go 发行版源码。
@@ -180,7 +191,7 @@ CPA_BINARY="$CPA_BINARY" \
 CPA_PLUGIN_SO="$CPA_PLUGIN_SO" \
 CC="$CC" \
 CGO_ENABLED=1 \
-"$GO_BIN" test -run '^TestCPAPluginEndToEnd$' -v .
+"$GO_BIN" test -run '^TestCPAPluginEndToEnd$' -v ./tests/integration
 ```
 
 `TestLivePreview` 和 `TestLiveCPACatalog` 会读取真实 CPA 配置并访问运行中的服务，因此必须单独显式启用，不能在 `.env` 中默认设置 `AXONHUB_LIVE_CONFIG`：
@@ -189,7 +200,7 @@ CGO_ENABLED=1 \
 : "${CPA_CONFIG_PATH:?请先设置 CPA_CONFIG_PATH}"
 
 AXONHUB_LIVE_CONFIG="$CPA_CONFIG_PATH" \
-"$GO_BIN" test -run '^(TestLivePreview|TestLiveCPACatalog)$' -v .
+"$GO_BIN" test -run '^(TestLivePreview|TestLiveCPACatalog)$' -v ./tests/integration
 ```
 
 ## 安装或更新插件

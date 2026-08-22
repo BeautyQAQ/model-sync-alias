@@ -1,4 +1,4 @@
-package main
+package syncer
 
 import (
 	"reflect"
@@ -8,7 +8,7 @@ import (
 	sdkconfig "github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
 )
 
-type modelDiff struct {
+type Diff struct {
 	UpstreamCount   int      `json:"upstream_count"`
 	ConfiguredCount int      `json:"configured_count"`
 	Added           []string `json:"added"`
@@ -18,8 +18,8 @@ type modelDiff struct {
 	Changed         bool     `json:"changed"`
 }
 
-func compareModels(existing, desired []sdkconfig.OpenAICompatibilityModel) modelDiff {
-	diff := modelDiff{
+func compareModels(existing, desired []sdkconfig.OpenAICompatibilityModel) Diff {
+	diff := Diff{
 		UpstreamCount:   len(desired),
 		ConfiguredCount: len(existing),
 		Changed:         !reflect.DeepEqual(existing, desired),

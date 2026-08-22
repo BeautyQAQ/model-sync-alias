@@ -1,4 +1,4 @@
-package main
+package integration
 
 import (
 	"bytes"
@@ -16,7 +16,13 @@ import (
 	"testing"
 	"time"
 
+	pluginservice "github.com/BeautyQAQ/model-sync-alias/internal/plugin"
 	sdkconfig "github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
+)
+
+const (
+	pluginID        = pluginservice.ID
+	defaultProvider = "AxonHub"
 )
 
 func TestCPAPluginEndToEnd(t *testing.T) {
@@ -261,11 +267,13 @@ func configuredModels(configPath string) ([]sdkconfig.OpenAICompatibilityModel, 
 	if errLoad != nil {
 		return nil, errLoad
 	}
-	provider, errProvider := findProvider(cfg, defaultProvider)
-	if errProvider != nil {
-		return nil, errProvider
+	for index := range cfg.OpenAICompatibility {
+		provider := &cfg.OpenAICompatibility[index]
+		if provider.Name == defaultProvider {
+			return provider.Models, nil
+		}
 	}
-	return provider.Models, nil
+	return nil, fmt.Errorf("OpenAI-compatible provider %q was not found", defaultProvider)
 }
 
 func integrationRequest(t *testing.T, method, url, managementKey string, body []byte) (int, []byte) {

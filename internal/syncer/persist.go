@@ -1,4 +1,4 @@
-package main
+package syncer
 
 import (
 	"bytes"
@@ -21,7 +21,7 @@ import (
 var errConcurrentConfigEdit = errors.New("CPA configuration changed while models were being fetched")
 
 type applyResult struct {
-	Diff       modelDiff
+	Diff       Diff
 	Applied    bool
 	BackupPath string
 }
