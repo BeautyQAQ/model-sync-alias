@@ -112,3 +112,32 @@ func TestAliasPoolsAndDeterministicOrder(t *testing.T) {
 		t.Fatalf("GLM pool was not ordered together: %+v", desired)
 	}
 }
+
+func TestBuildDesiredModelsMaterializesCanonicalSelfAliasInPool(t *testing.T) {
+	cfg := settings{ExactOverrides: map[string]string{
+		"deepseek/deepseek-v4-pro-0813": "deepseek-v4-pro",
+	}}
+	desired := buildDesiredModels([]string{
+		"deepseek-v4-pro",
+		"deepseek/deepseek-v4-pro-0813",
+		"diffusiongemma-26b-a4b-it",
+	}, nil, cfg)
+
+	byName := make(map[string]sdkconfig.OpenAICompatibilityModel, len(desired))
+	for _, model := range desired {
+		byName[model.Name] = model
+	}
+	for _, name := range []string{"deepseek-v4-pro", "deepseek/deepseek-v4-pro-0813"} {
+		if got := byName[name].Alias; got != "deepseek-v4-pro" {
+			t.Errorf("model %q alias = %q, want deepseek-v4-pro", name, got)
+		}
+	}
+	if got := byName["diffusiongemma-26b-a4b-it"].Alias; got != "" {
+		t.Errorf("standalone model alias = %q, want empty", got)
+	}
+
+	diff := compareModels(nil, desired)
+	if diff.AliasPoolCount != 1 {
+		t.Fatalf("alias pool count = %d, want 1", diff.AliasPoolCount)
+	}
+}

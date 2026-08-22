@@ -41,6 +41,8 @@ func TestCPAPluginEndToEnd(t *testing.T) {
 		"z-ai/glm-5.2",
 		"openai/gpt-oss-20b",
 		"openai/gpt-oss-120b",
+		"deepseek-v4-pro",
+		"deepseek/deepseek-v4-pro-0813",
 	}
 	receivedModels := make(chan string, 10)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +110,8 @@ plugins:
       sync_on_start: true
       request_timeout: 3s
       backup_retention: 5
-      exact_overrides: {}
+      exact_overrides:
+        deepseek/deepseek-v4-pro-0813: deepseek-v4-pro
       regex_overrides: []
 openai-compatibility:
   - name: AxonHub
@@ -145,8 +148,17 @@ openai-compatibility:
 		if errModels != nil {
 			return errModels
 		}
-		if len(models) != 4 {
+		if len(models) != 6 {
 			return fmt.Errorf("configured model count = %d", len(models))
+		}
+		byName := make(map[string]sdkconfig.OpenAICompatibilityModel, len(models))
+		for _, model := range models {
+			byName[model.Name] = model
+		}
+		for _, name := range []string{"deepseek-v4-pro", "deepseek/deepseek-v4-pro-0813"} {
+			if byName[name].Alias != "deepseek-v4-pro" {
+				return fmt.Errorf("model %q alias = %q", name, byName[name].Alias)
+			}
 		}
 		return nil
 	}, logPath)
@@ -156,11 +168,11 @@ openai-compatibility:
 		t.Fatalf("unauthenticated management status = %d, want 401", statusCode)
 	}
 	statusCode, body := integrationRequest(t, http.MethodGet, baseURL+"/v0/management/plugins/"+pluginID+"/status", "integration-management", nil)
-	if statusCode != http.StatusOK || !bytes.Contains(body, []byte(`"upstream_count":4`)) {
+	if statusCode != http.StatusOK || !bytes.Contains(body, []byte(`"upstream_count":6`)) {
 		t.Fatalf("authenticated status = %d, body = %s", statusCode, body)
 	}
 
-	listed := waitForModelCatalog(t, baseURL, logPath, []string{"glm-5.2", "gpt-oss-20b", "gpt-oss-120b"}, []string{"GLM-5.2-think", "stale"})
+	listed := waitForModelCatalog(t, baseURL, logPath, []string{"deepseek-v4-pro", "glm-5.2", "gpt-oss-20b", "gpt-oss-120b"}, []string{"deepseek/deepseek-v4-pro-0813", "GLM-5.2-think", "stale"})
 	_ = listed
 	postChat(t, baseURL, "gpt-oss-20b")
 	if raw := receiveRawModel(t, receivedModels); raw != "openai/gpt-oss-20b" {
@@ -169,6 +181,16 @@ openai-compatibility:
 	postChat(t, baseURL, "glm-5.2")
 	if raw := receiveRawModel(t, receivedModels); raw != "GLM-5.2-think" && raw != "z-ai/glm-5.2" {
 		t.Fatalf("glm-5.2 routed to %q", raw)
+	}
+	deepSeekModels := make(map[string]bool, 2)
+	for range 2 {
+		postChat(t, baseURL, "deepseek-v4-pro")
+		deepSeekModels[receiveRawModel(t, receivedModels)] = true
+	}
+	for _, raw := range []string{"deepseek-v4-pro", "deepseek/deepseek-v4-pro-0813"} {
+		if !deepSeekModels[raw] {
+			t.Fatalf("deepseek-v4-pro pool calls = %v, missing %q", deepSeekModels, raw)
+		}
 	}
 
 	upstreamMu.Lock()
