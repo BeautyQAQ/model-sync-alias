@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -43,8 +44,10 @@ func TestCPAPluginEndToEnd(t *testing.T) {
 		"openai/gpt-oss-120b",
 		"deepseek-v4-pro",
 		"deepseek/deepseek-v4-pro-0813",
+		"claude-fable-5",
 	}
 	receivedModels := make(chan string, 10)
+	var modelListRequests atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer upstream-key" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -52,6 +55,7 @@ func TestCPAPluginEndToEnd(t *testing.T) {
 		}
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/models":
+			modelListRequests.Add(1)
 			upstreamMu.RLock()
 			ids := append([]string(nil), upstreamIDs...)
 			upstreamMu.RUnlock()
@@ -148,7 +152,7 @@ openai-compatibility:
 		if errModels != nil {
 			return errModels
 		}
-		if len(models) != 6 {
+		if len(models) != 7 {
 			return fmt.Errorf("configured model count = %d", len(models))
 		}
 		byName := make(map[string]sdkconfig.OpenAICompatibilityModel, len(models))
@@ -160,20 +164,72 @@ openai-compatibility:
 				return fmt.Errorf("model %q alias = %q", name, byName[name].Alias)
 			}
 		}
+		if got := byName["claude-fable-5"].Alias; got != "claude-fable-5" {
+			return fmt.Errorf("standalone model alias = %q", got)
+		}
 		return nil
 	}, logPath)
 
-	statusCode, _ := integrationRequest(t, http.MethodGet, baseURL+"/v0/management/plugins/"+pluginID+"/status", "", nil)
+	// Simulate a management save made after the plugin synchronized. CPA
+	// reconfigures plugins on that reload, and the sync plugin must restore a
+	// canonical self-alias that the saved snapshot cleared.
+	requestsBeforeReload := modelListRequests.Load()
+	currentConfig, errReadConfig := os.ReadFile(configPath)
+	if errReadConfig != nil {
+		t.Fatal(errReadConfig)
+	}
+	canonicalRow := []byte("      - name: deepseek-v4-pro\n        alias: deepseek-v4-pro\n")
+	clearedRow := []byte("      - name: deepseek-v4-pro\n        alias: \"\"\n")
+	if count := bytes.Count(currentConfig, canonicalRow); count != 1 {
+		t.Fatalf("canonical DeepSeek row count = %d, want 1", count)
+	}
+	currentConfig = bytes.Replace(currentConfig, canonicalRow, clearedRow, 1)
+	standaloneRow := []byte("      - name: claude-fable-5\n        alias: claude-fable-5\n")
+	clearedStandaloneRow := []byte("      - name: claude-fable-5\n        alias: \"\"\n")
+	if count := bytes.Count(currentConfig, standaloneRow); count != 1 {
+		t.Fatalf("standalone Claude row count = %d, want 1", count)
+	}
+	currentConfig = bytes.Replace(currentConfig, standaloneRow, clearedStandaloneRow, 1)
+	statusCode, body := integrationRequest(t, http.MethodPut, baseURL+"/v0/management/config.yaml", "integration-management", currentConfig)
+	if statusCode != http.StatusOK {
+		t.Fatalf("management config reload = %d, body = %s", statusCode, body)
+	}
+	waitForIntegration(t, 10*time.Second, func() error {
+		if modelListRequests.Load() <= requestsBeforeReload {
+			return fmt.Errorf("plugin did not reconcile after same-settings reconfigure")
+		}
+		models, errModels := configuredModels(configPath)
+		if errModels != nil {
+			return errModels
+		}
+		byName := make(map[string]sdkconfig.OpenAICompatibilityModel, len(models))
+		for _, model := range models {
+			byName[model.Name] = model
+		}
+		if got := byName["deepseek-v4-pro"].Alias; got != "deepseek-v4-pro" {
+			return fmt.Errorf("canonical alias after management reload = %q", got)
+		}
+		if got := byName["claude-fable-5"].Alias; got != "claude-fable-5" {
+			return fmt.Errorf("standalone alias after management reload = %q", got)
+		}
+		return nil
+	}, logPath)
+
+	statusCode, _ = integrationRequest(t, http.MethodGet, baseURL+"/v0/management/plugins/"+pluginID+"/status", "", nil)
 	if statusCode != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated management status = %d, want 401", statusCode)
 	}
-	statusCode, body := integrationRequest(t, http.MethodGet, baseURL+"/v0/management/plugins/"+pluginID+"/status", "integration-management", nil)
-	if statusCode != http.StatusOK || !bytes.Contains(body, []byte(`"upstream_count":6`)) {
+	statusCode, body = integrationRequest(t, http.MethodGet, baseURL+"/v0/management/plugins/"+pluginID+"/status", "integration-management", nil)
+	if statusCode != http.StatusOK || !bytes.Contains(body, []byte(`"upstream_count":7`)) {
 		t.Fatalf("authenticated status = %d, body = %s", statusCode, body)
 	}
 
-	listed := waitForModelCatalog(t, baseURL, logPath, []string{"deepseek-v4-pro", "glm-5.2", "gpt-oss-20b", "gpt-oss-120b"}, []string{"deepseek/deepseek-v4-pro-0813", "GLM-5.2-think", "stale"})
+	listed := waitForModelCatalog(t, baseURL, logPath, []string{"claude-fable-5", "deepseek-v4-pro", "glm-5.2", "gpt-oss-20b", "gpt-oss-120b"}, []string{"deepseek/deepseek-v4-pro-0813", "GLM-5.2-think", "stale"})
 	_ = listed
+	postChat(t, baseURL, "claude-fable-5")
+	if raw := receiveRawModel(t, receivedModels); raw != "claude-fable-5" {
+		t.Fatalf("claude-fable-5 routed to %q", raw)
+	}
 	postChat(t, baseURL, "gpt-oss-20b")
 	if raw := receiveRawModel(t, receivedModels); raw != "openai/gpt-oss-20b" {
 		t.Fatalf("gpt-oss-20b routed to %q", raw)

@@ -190,15 +190,11 @@ func buildDesiredModels(ids []string, existing []sdkconfig.OpenAICompatibilityMo
 		seen[key] = struct{}{}
 		model := oldByName[key]
 		model.Name = id
-		canonical := canonicalModelName(id, cfg)
-		if canonical != id {
-			model.Alias = canonical
-		} else {
-			model.Alias = ""
-		}
+		// Keep every synchronized model on CPA's explicit alias path. Standalone
+		// models use a self-alias; normalized variants use their canonical alias.
+		model.Alias = canonicalModelName(id, cfg)
 		desired = append(desired, model)
 	}
-	materializeAliasPools(desired)
 	sort.SliceStable(desired, func(i, j int) bool {
 		left := desired[i].Alias
 		if left == "" {
@@ -217,45 +213,4 @@ func buildDesiredModels(ids []string, existing []sdkconfig.OpenAICompatibilityMo
 		return desired[i].Name < desired[j].Name
 	})
 	return desired
-}
-
-// materializeAliasPools gives every member of a shared public-name group an
-// explicit alias. CPA resolves explicit aliases before direct model names, so
-// leaving the canonical member's alias empty would exclude it from the pool.
-func materializeAliasPools(models []sdkconfig.OpenAICompatibilityModel) {
-	type aliasPool struct {
-		alias         string
-		hasExplicit   bool
-		memberIndexes []int
-	}
-
-	pools := make(map[string]aliasPool, len(models))
-	for index := range models {
-		alias := strings.TrimSpace(models[index].Alias)
-		explicit := alias != ""
-		if !explicit {
-			alias = strings.TrimSpace(models[index].Name)
-		}
-		key := strings.ToLower(alias)
-		if key == "" {
-			continue
-		}
-
-		pool := pools[key]
-		pool.memberIndexes = append(pool.memberIndexes, index)
-		if pool.alias == "" || (explicit && !pool.hasExplicit) {
-			pool.alias = alias
-			pool.hasExplicit = explicit
-		}
-		pools[key] = pool
-	}
-
-	for _, pool := range pools {
-		if len(pool.memberIndexes) < 2 {
-			continue
-		}
-		for _, index := range pool.memberIndexes {
-			models[index].Alias = pool.alias
-		}
-	}
 }

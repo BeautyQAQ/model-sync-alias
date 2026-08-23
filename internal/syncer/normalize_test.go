@@ -113,14 +113,17 @@ func TestAliasPoolsAndDeterministicOrder(t *testing.T) {
 	}
 }
 
-func TestBuildDesiredModelsMaterializesCanonicalSelfAliasInPool(t *testing.T) {
+func TestBuildDesiredModelsAlwaysSetsExplicitAliases(t *testing.T) {
 	cfg := settings{ExactOverrides: map[string]string{
 		"deepseek/deepseek-v4-pro-0813": "deepseek-v4-pro",
+		"raw-model":                     "",
 	}}
 	desired := buildDesiredModels([]string{
 		"deepseek-v4-pro",
 		"deepseek/deepseek-v4-pro-0813",
 		"diffusiongemma-26b-a4b-it",
+		"claude-fable-5",
+		"raw-model",
 	}, nil, cfg)
 
 	byName := make(map[string]sdkconfig.OpenAICompatibilityModel, len(desired))
@@ -132,8 +135,15 @@ func TestBuildDesiredModelsMaterializesCanonicalSelfAliasInPool(t *testing.T) {
 			t.Errorf("model %q alias = %q, want deepseek-v4-pro", name, got)
 		}
 	}
-	if got := byName["diffusiongemma-26b-a4b-it"].Alias; got != "" {
-		t.Errorf("standalone model alias = %q, want empty", got)
+	for _, name := range []string{"diffusiongemma-26b-a4b-it", "claude-fable-5", "raw-model"} {
+		if got := byName[name].Alias; got != name {
+			t.Errorf("standalone model %q alias = %q, want self-alias", name, got)
+		}
+	}
+	for _, model := range desired {
+		if model.Alias == "" {
+			t.Errorf("model %q has an empty alias", model.Name)
+		}
 	}
 
 	diff := compareModels(nil, desired)

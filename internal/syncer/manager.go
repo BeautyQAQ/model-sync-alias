@@ -40,6 +40,7 @@ type Manager struct {
 	status    Status
 	cancel    context.CancelFunc
 	done      chan struct{}
+	reconcile chan struct{}
 	runMu     sync.Mutex
 	log       func(level, message string, fields map[string]any)
 }
@@ -63,13 +64,16 @@ func (m *Manager) Configure(raw []byte) error {
 	}
 	m.mu.RLock()
 	same := m.hasConfig && settingsEqual(m.settings, cfg)
+	reconcile := m.reconcile
 	m.mu.RUnlock()
 	if same {
+		requestReconcile(reconcile)
 		return nil
 	}
 	m.stopWorker()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	reconcile = make(chan struct{}, 1)
 	m.mu.Lock()
 	m.settings = cfg
 	m.hasConfig = true
@@ -77,8 +81,9 @@ func (m *Manager) Configure(raw []byte) error {
 	m.status.LastError = ""
 	m.cancel = cancel
 	m.done = done
+	m.reconcile = reconcile
 	m.mu.Unlock()
-	go m.worker(ctx, done, cfg)
+	go m.worker(ctx, done, reconcile, cfg)
 	return nil
 }
 
@@ -88,6 +93,7 @@ func (m *Manager) stopWorker() {
 	done := m.done
 	m.cancel = nil
 	m.done = nil
+	m.reconcile = nil
 	m.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -104,7 +110,7 @@ func (m *Manager) Shutdown() {
 	m.stopWorker()
 }
 
-func (m *Manager) worker(ctx context.Context, done chan struct{}, cfg settings) {
+func (m *Manager) worker(ctx context.Context, done chan struct{}, reconcile <-chan struct{}, cfg settings) {
 	defer close(done)
 	ticker := time.NewTicker(cfg.Interval)
 	defer ticker.Stop()
@@ -128,7 +134,22 @@ func (m *Manager) worker(ctx context.Context, done chan struct{}, cfg settings) 
 		case now := <-ticker.C:
 			m.setNextRun(now.Add(cfg.Interval))
 			_, _ = m.Run(ctx, true, false)
+		case <-reconcile:
+			_, _ = m.Run(ctx, true, false)
 		}
+	}
+}
+
+// requestReconcile coalesces repeated CPA configuration reloads. CPA invokes a
+// plugin reconfigure even when only fields outside the plugin settings changed;
+// those saves may replace model aliases using an older in-memory snapshot.
+func requestReconcile(reconcile chan<- struct{}) {
+	if reconcile == nil {
+		return
+	}
+	select {
+	case reconcile <- struct{}{}:
+	default:
 	}
 }
 

@@ -56,7 +56,7 @@ func TestLiveCPACatalog(t *testing.T) {
 		ids[model.ID] = true
 	}
 	for _, wanted := range []string{
-		"deepseek-v4-flash", "deepseek-v4-pro", "glm-5.2", "gpt-oss-20b", "gpt-oss-120b",
+		"claude-fable-5", "deepseek-v4-flash", "deepseek-v4-pro", "glm-5.2", "gpt-oss-120b",
 		"qwen3.6", "MiniMax-M3", "FLUX.2-klein-4B",
 	} {
 		if !ids[wanted] {
@@ -65,7 +65,7 @@ func TestLiveCPACatalog(t *testing.T) {
 	}
 	for _, unwanted := range []string{
 		"DeepSeek-V4-Flash-0731-262K", "DeepSeek-V4-Flash-0731-262K-think",
-		"GLM-5.2-Long-think", "openai/gpt-oss-20b", "Qwen/Qwen3.6-27B-FP8",
+		"GLM-5.2-Long-think", "gpt-oss-20b", "openai/gpt-oss-20b", "Qwen/Qwen3.6-27B-FP8",
 	} {
 		if ids[unwanted] {
 			t.Errorf("raw or stale model %q is still published", unwanted)

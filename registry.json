@@ -6,7 +6,7 @@
       "name": "AxonHub Model Sync",
       "description": "Synchronizes an OpenAI-compatible provider model list and generates canonical aliases for CLIProxyAPI.",
       "author": "BeautyQAQ",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "repository": "https://github.com/BeautyQAQ/model-sync-alias",
       "homepage": "https://github.com/BeautyQAQ/model-sync-alias",
       "license": "MIT",

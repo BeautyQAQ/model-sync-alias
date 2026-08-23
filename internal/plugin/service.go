@@ -15,7 +15,7 @@ import (
 
 const (
 	ID      = "axonhub-model-sync"
-	Version = "1.0.3"
+	Version = "1.0.4"
 )
 
 type registration struct {

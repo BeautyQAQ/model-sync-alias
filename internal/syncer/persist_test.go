@@ -46,6 +46,9 @@ func TestApplyModelsStrictMirrorIncludingEmpty(t *testing.T) {
 		if model.Name == "GLM-5.2-think" && (model.Alias != "glm-5.2" || model.DisplayName != "Keep metadata") {
 			t.Fatalf("surviving model was not recomputed while preserving metadata: %+v", model)
 		}
+		if model.Name == "new-model" && model.Alias != "new-model" {
+			t.Fatalf("new standalone model did not receive a self-alias: %+v", model)
+		}
 	}
 	if result.BackupPath == "" {
 		t.Fatal("backup path is empty")
@@ -76,7 +79,7 @@ func TestApplyModelsStrictMirrorIncludingEmpty(t *testing.T) {
 }
 
 func TestApplyModelsNoOpDoesNotRewriteOrBackup(t *testing.T) {
-	models := []sdkconfig.OpenAICompatibilityModel{{Name: "model-a", Alias: ""}}
+	models := []sdkconfig.OpenAICompatibilityModel{{Name: "model-a", Alias: "model-a"}}
 	configPath := writeTestConfig(t, models)
 	cfg := testSettings(configPath)
 	before, errRead := os.ReadFile(configPath)
