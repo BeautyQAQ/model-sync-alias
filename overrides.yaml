@@ -41,6 +41,9 @@ regex_overrides:
   # Qwen3 Next 与带版本号的 Qwen3 系列
   - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?qwen3[-_.]?next(?:[-_].*)?$'
     replacement: 'qwen3-next'
+  # Qwen3.8 27B 是独立模型规格；free、think 和 FP8 变体共享 27B 模型池。
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?qwen3[._-]?8[-_]27b(?:[-_](?:free|think|fp8))*$'
+    replacement: 'qwen3.8-27b'
   - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?qwen3[._-]?([5678])[-_](?:\d.*)$'
     replacement: 'qwen3.${1}'
   - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?qwen3[-_](?:\d.*)$'

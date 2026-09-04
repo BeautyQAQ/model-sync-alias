@@ -120,4 +120,14 @@ func TestRepositoryOverridesFileIsValid(t *testing.T) {
 	if len(loaded.ExactOverrides) == 0 || len(loaded.RegexOverrides) == 0 {
 		t.Fatalf("repository overrides are unexpectedly empty: %+v", loaded)
 	}
+	for _, raw := range []string{
+		"qwen/qwen3.8-27b",
+		"Qwen3.8-27B",
+		"qwen3.8-27b-free",
+		"Qwen3.8-27B-think",
+	} {
+		if got := canonicalModelName(raw, loaded); got != "qwen3.8-27b" {
+			t.Errorf("canonicalModelName(%q) = %q, want qwen3.8-27b", raw, got)
+		}
+	}
 }
