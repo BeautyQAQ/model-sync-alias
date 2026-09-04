@@ -1,7 +1,9 @@
 package syncer
 
 import (
+	"bytes"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -49,6 +51,7 @@ type pluginSettingsYAML struct {
 	Enabled         bool                  `yaml:"enabled"`
 	Provider        string                `yaml:"provider"`
 	ConfigPath      string                `yaml:"config_path"`
+	OverridesPath   string                `yaml:"overrides_path"`
 	Interval        durationValue         `yaml:"interval"`
 	SyncOnStart     *bool                 `yaml:"sync_on_start"`
 	RequestTimeout  durationValue         `yaml:"request_timeout"`
@@ -60,6 +63,7 @@ type pluginSettingsYAML struct {
 type settings struct {
 	Provider        string
 	ConfigPath      string
+	OverridesPath   string
 	Interval        time.Duration
 	SyncOnStart     bool
 	RequestTimeout  time.Duration
@@ -85,6 +89,16 @@ func parseSettings(raw []byte) (settings, error) {
 	absPath, errAbs := filepath.Abs(configPath)
 	if errAbs != nil {
 		return settings{}, fmt.Errorf("resolve config_path: %w", errAbs)
+	}
+	overridesPath := strings.TrimSpace(input.OverridesPath)
+	if overridesPath != "" {
+		if !filepath.IsAbs(overridesPath) {
+			return settings{}, fmt.Errorf("overrides_path must be an absolute path")
+		}
+		if len(input.ExactOverrides) > 0 || len(input.RegexOverrides) > 0 {
+			return settings{}, fmt.Errorf("overrides_path cannot be combined with inline exact_overrides or regex_overrides")
+		}
+		overridesPath = filepath.Clean(overridesPath)
 	}
 
 	interval := input.Interval.Duration
@@ -113,23 +127,42 @@ func parseSettings(raw []byte) (settings, error) {
 		syncOnStart = *input.SyncOnStart
 	}
 
-	exact := make(map[string]string, len(input.ExactOverrides))
-	for name, alias := range input.ExactOverrides {
+	exact, compiled, errOverrides := compileOverrides(input.ExactOverrides, input.RegexOverrides)
+	if errOverrides != nil {
+		return settings{}, errOverrides
+	}
+
+	return settings{
+		Provider:        provider,
+		ConfigPath:      filepath.Clean(absPath),
+		OverridesPath:   overridesPath,
+		Interval:        interval,
+		SyncOnStart:     syncOnStart,
+		RequestTimeout:  requestTimeout,
+		BackupRetention: retention,
+		ExactOverrides:  exact,
+		RegexOverrides:  compiled,
+	}, nil
+}
+
+func compileOverrides(exactInput map[string]string, regexInput []regexOverrideConfig) (map[string]string, []compiledRegexOverride, error) {
+	exact := make(map[string]string, len(exactInput))
+	for name, alias := range exactInput {
 		name = strings.TrimSpace(name)
 		if name == "" {
-			return settings{}, fmt.Errorf("exact_overrides contains an empty model name")
+			return nil, nil, fmt.Errorf("exact_overrides contains an empty model name")
 		}
 		exact[name] = strings.TrimSpace(alias)
 	}
-	compiled := make([]compiledRegexOverride, 0, len(input.RegexOverrides))
-	for index, override := range input.RegexOverrides {
+	compiled := make([]compiledRegexOverride, 0, len(regexInput))
+	for index, override := range regexInput {
 		pattern := strings.TrimSpace(override.Pattern)
 		if pattern == "" {
-			return settings{}, fmt.Errorf("regex_overrides[%d].pattern is required", index)
+			return nil, nil, fmt.Errorf("regex_overrides[%d].pattern is required", index)
 		}
 		re, errCompile := regexp.Compile(pattern)
 		if errCompile != nil {
-			return settings{}, fmt.Errorf("compile regex_overrides[%d]: %w", index, errCompile)
+			return nil, nil, fmt.Errorf("compile regex_overrides[%d]: %w", index, errCompile)
 		}
 		compiled = append(compiled, compiledRegexOverride{
 			Pattern:     pattern,
@@ -138,16 +171,33 @@ func parseSettings(raw []byte) (settings, error) {
 		})
 	}
 
-	return settings{
-		Provider:        provider,
-		ConfigPath:      filepath.Clean(absPath),
-		Interval:        interval,
-		SyncOnStart:     syncOnStart,
-		RequestTimeout:  requestTimeout,
-		BackupRetention: retention,
-		ExactOverrides:  exact,
-		RegexOverrides:  compiled,
-	}, nil
+	return exact, compiled, nil
+}
+
+func loadOverrides(cfg settings) (settings, error) {
+	if cfg.OverridesPath == "" {
+		return cfg, nil
+	}
+	raw, errRead := os.ReadFile(cfg.OverridesPath)
+	if errRead != nil {
+		return settings{}, fmt.Errorf("read overrides_path %q: %w", cfg.OverridesPath, errRead)
+	}
+	var input struct {
+		ExactOverrides map[string]string     `yaml:"exact_overrides"`
+		RegexOverrides []regexOverrideConfig `yaml:"regex_overrides"`
+	}
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	decoder.KnownFields(true)
+	if errUnmarshal := decoder.Decode(&input); errUnmarshal != nil {
+		return settings{}, fmt.Errorf("decode overrides_path %q: %w", cfg.OverridesPath, errUnmarshal)
+	}
+	exact, compiled, errCompile := compileOverrides(input.ExactOverrides, input.RegexOverrides)
+	if errCompile != nil {
+		return settings{}, fmt.Errorf("validate overrides_path %q: %w", cfg.OverridesPath, errCompile)
+	}
+	cfg.ExactOverrides = exact
+	cfg.RegexOverrides = compiled
+	return cfg, nil
 }
 
 func settingsEqual(left, right settings) bool {

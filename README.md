@@ -53,17 +53,18 @@ plugins:
       enabled: true
       provider: AxonHub
       config_path: /absolute/path/to/cliproxyapi/config.yaml
+      overrides_path: /absolute/path/to/model-sync-alias/overrides.yaml
       interval: 3h
       sync_on_start: true
       request_timeout: 30s
       backup_retention: 30
-      exact_overrides: {}
-      regex_overrides: []
 ```
 
-请将示例路径替换为本机的绝对路径。`plugins.dir` 指向 CPA 加载 `.so` 的目录，`config_path` 指向 CPA 正在使用的 YAML 配置文件；两者都不应指向本项目源码目录。插件配置不会展开 `$CPA_DIR` 等 Shell 变量，因此不能直接在 YAML 中使用环境变量占位符。
+请将示例路径替换为本机的绝对路径。`plugins.dir` 指向 CPA 加载 `.so` 的目录，`config_path` 指向 CPA 正在使用的 YAML 配置文件；两者都不应指向本项目源码目录。`overrides_path` 指向单独维护的别名规则文件，可以位于本项目源码目录。插件配置不会展开 `$CPA_DIR` 等 Shell 变量，因此不能直接在 YAML 中使用环境变量占位符。
 
-精确覆盖规则的值如果为空，则保留原始的上游模型 ID。正则规则会按配置顺序执行，并使用 Go 正则表达式的替换语法；第一条匹配的规则生效。若没有正则规则匹配（包括未配置或配置为空列表），插件会继续执行 `normalize.go` 中现有的内置模型族规则和通用清理逻辑：
+项目根目录的 `overrides.yaml` 是规则文件示例，也是推荐的规则维护入口。插件会在每次定时同步、手动预览和手动同步开始前重新读取该文件，因此修改规则后不需要重建插件或重启 CPA。文件缺失、YAML 无效或正则表达式无效时，本次操作会失败且不会修改 CPA 配置。
+
+精确覆盖规则的值如果为空，则保留原始的上游模型 ID。正则规则会按顺序执行，第一条匹配的规则生效；未匹配的模型继续使用 `normalize.go` 中的内置模型族规则和通用清理逻辑：
 
 ```yaml
 exact_overrides:
@@ -72,6 +73,8 @@ regex_overrides:
   - pattern: '^vendor/(.*)$'
     replacement: '$1'
 ```
+
+`overrides_path` 是可选配置。为了兼容旧配置，不设置它时仍可将 `exact_overrides` 和 `regex_overrides` 直接写在 CPA 的插件配置下；设置外部路径时不能再同时配置非空的内联规则，以确保只有一个规则来源。
 
 精确覆盖规则的优先级高于内置模型家族规则。插件默认会区分 `gpt-oss-20b` 和 `gpt-oss-120b`；如果配置了以下规则，则会主动把 20B 模型合并进 120B 的别名池：
 
@@ -183,6 +186,7 @@ curl -sS -X POST \
 │       ├── live_preview_test.go       # 真实配置的只读同步预览
 │       └── live_catalog_test.go       # 运行中 CPA 模型目录检查
 ├── .env.example                       # 本地构建和测试环境变量模板
+├── overrides.yaml                     # 每次同步前动态加载的模型别名规则
 ├── go.mod                             # Go 模块及直接依赖
 ├── go.sum                             # 依赖校验信息
 └── README.md                          # 使用、开发和部署文档

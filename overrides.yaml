@@ -1,0 +1,69 @@
+exact_overrides:
+  claude-haiku-4-5-20251001-thinking: claude-haiku-4-5-20251001
+  claude-sonnet-4-5-20250929-thinking: claude-sonnet-4-5
+  claude-sonnet-4-5-20250929: claude-sonnet-4-5
+  deepseek/deepseek-v4-flash-0731: deepseek-v4-flash
+  deepseek/deepseek-v4-pro-0813: deepseek-v4-pro
+  gpt-oss-20b: gpt-oss-120b
+  openai/gpt-oss-20b: gpt-oss-120b
+  tencent/hy3: hy3
+
+  # 公益站的 GPT 模型使用 free 后缀，避免与其他账号的模型池混用。
+  codex-auto-review: codex-auto-review-free
+  gpt-image-1.5: gpt-image-1.5-free
+  gpt-image-2: gpt-image-2-free
+  gpt-5.3-codex-spark: gpt-5.3-codex-spark-free
+  gpt-5.4: gpt-5.4-free
+  gpt-5.4-mini: gpt-5.4-mini-free
+  gpt-5.5: gpt-5.5-free
+  gpt-5.6-sol: gpt-5.6-sol-free
+  gpt-5.6-terra: gpt-5.6-terra-free
+  gpt-5.6-luna: gpt-5.6-luna-free
+
+# 规则按顺序匹配，第一条命中的规则生效；没有匹配的模型继续使用内置归一化逻辑。
+regex_overrides:
+  # DeepSeek V4
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?deepseek[-_]?v4[-_]flash(?:[-_\[].*)?$'
+    replacement: 'deepseek-v4-flash'
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?deepseek[-_]?v4[-_]pro(?:[-_\[].*)?$'
+    replacement: 'deepseek-v4-pro'
+
+  # GLM 5 / 5.1 / 5.2（同时接受 zai-glm-5-2）
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?(?:zai-)?glm[-_]?5[._-]?([12])(?:[-_].*)?$'
+    replacement: 'glm-5.${1}'
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?(?:zai-)?glm[-_]?5(?:[-_].*)?$'
+    replacement: 'glm-5'
+
+  # Kimi K2.5 / K2.6 / K2.7
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?kimi[-_]?k2[._-]([567])(?:[-_](?:code|think))*$'
+    replacement: 'kimi-k2.${1}'
+
+  # Qwen3 Next 与带版本号的 Qwen3 系列
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?qwen3[-_.]?next(?:[-_].*)?$'
+    replacement: 'qwen3-next'
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?qwen3[._-]?([5678])[-_](?:\d.*)$'
+    replacement: 'qwen3.${1}'
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?qwen3[-_](?:\d.*)$'
+    replacement: 'qwen3'
+
+  # MiniMax
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?minimax[-_]?m2[._-]5(?:[-_](?:highspeed|think))*$'
+    replacement: 'MiniMax-M2.5'
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?minimax[-_]?m2[._-]7(?:[-_](?:highspeed|think))*$'
+    replacement: 'MiniMax-M2.7'
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?minimax[-_]?m3(?:[-_](?:highspeed|think))*$'
+    replacement: 'MiniMax-M3'
+
+  # GPT OSS 与图片模型变体
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?gpt[-_]oss[-_]20b$'
+    replacement: 'gpt-oss-20b'
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?gpt[-_]oss[-_]120b$'
+    replacement: 'gpt-oss-120b'
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?gpt-image-2-\d+x\d+$'
+    replacement: 'gpt-image-2'
+
+  # FLUX.2 Klein
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?flux\.2-klein-4b$'
+    replacement: 'FLUX.2-klein-4B'
+  - pattern: '(?i)^(?:(?:openai|deepseek-ai|z-ai|qwen|moonshotai|minimaxai|google|black-forest-labs)/)?flux\.2-klein-9b$'
+    replacement: 'FLUX.2-klein-9B'

@@ -187,6 +187,11 @@ func (m *Manager) Run(ctx context.Context, apply, returnModels bool) (Result, er
 		m.status.Running = false
 		m.mu.Unlock()
 	}()
+	cfg, errOverrides := loadOverrides(cfg)
+	if errOverrides != nil {
+		m.recordError(errOverrides)
+		return Result{}, errOverrides
+	}
 
 	snapshot, errSnapshot := loadSourceSnapshot(cfg.ConfigPath, cfg.Provider)
 	if errSnapshot != nil {

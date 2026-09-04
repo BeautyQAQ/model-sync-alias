@@ -15,7 +15,7 @@ import (
 
 const (
 	ID      = "axonhub-model-sync"
-	Version = "1.0.4"
+	Version = "1.1.0"
 )
 
 type registration struct {
@@ -110,6 +110,7 @@ func pluginRegistration() registration {
 			ConfigFields: []pluginapi.ConfigField{
 				{Name: "provider", Type: pluginapi.ConfigFieldTypeString, Description: "Exact OpenAI-compatible provider name to synchronize."},
 				{Name: "config_path", Type: pluginapi.ConfigFieldTypeString, Description: "Absolute path to the CPA YAML configuration."},
+				{Name: "overrides_path", Type: pluginapi.ConfigFieldTypeString, Description: "Optional absolute path to a YAML file containing exact_overrides and regex_overrides; reloaded before every synchronization."},
 				{Name: "interval", Type: pluginapi.ConfigFieldTypeString, Description: "Synchronization interval as a Go duration, for example 3h."},
 				{Name: "sync_on_start", Type: pluginapi.ConfigFieldTypeBoolean, Description: "Synchronize immediately when the plugin starts."},
 				{Name: "request_timeout", Type: pluginapi.ConfigFieldTypeString, Description: "Timeout for fetching the upstream model catalog."},

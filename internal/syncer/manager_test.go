@@ -1,6 +1,8 @@
 package syncer
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -91,4 +93,81 @@ regex_overrides: []
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("same-settings reconfigure did not restore the canonical alias; upstream requests = %d", requests.Load())
+}
+
+func TestRunReloadsExternalOverridesAndDoesNotApplyInvalidRules(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]string{{"id": "vendor/model"}},
+		})
+	}))
+	defer upstream.Close()
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	configYAML := fmt.Sprintf(`openai-compatibility:
+  - name: AxonHub
+    base-url: %q
+    api-key-entries:
+      - api-key: test-key
+    models:
+      - name: vendor/model
+        alias: old-alias
+`, upstream.URL+"/v1")
+	if errWrite := os.WriteFile(configPath, []byte(configYAML), 0o600); errWrite != nil {
+		t.Fatal(errWrite)
+	}
+	overridesPath := filepath.Join(dir, "overrides.yaml")
+	writeOverrides := func(raw string) {
+		t.Helper()
+		if errWrite := os.WriteFile(overridesPath, []byte(raw), 0o600); errWrite != nil {
+			t.Fatal(errWrite)
+		}
+	}
+	writeOverrides("exact_overrides:\n  vendor/model: first-alias\nregex_overrides: []\n")
+
+	manager := NewManager(nil)
+	defer manager.Shutdown()
+	pluginYAML := []byte(fmt.Sprintf(`provider: AxonHub
+config_path: %q
+overrides_path: %q
+interval: 1h
+sync_on_start: false
+request_timeout: 3s
+`, configPath, overridesPath))
+	if errConfigure := manager.Configure(pluginYAML); errConfigure != nil {
+		t.Fatal(errConfigure)
+	}
+	first, errFirst := manager.Run(context.Background(), false, true)
+	if errFirst != nil {
+		t.Fatal(errFirst)
+	}
+	if len(first.Models) != 1 || first.Models[0].Alias != "first-alias" {
+		t.Fatalf("unexpected first preview: %+v", first.Models)
+	}
+
+	writeOverrides("exact_overrides:\n  vendor/model: second-alias\nregex_overrides: []\n")
+	second, errSecond := manager.Run(context.Background(), false, true)
+	if errSecond != nil {
+		t.Fatal(errSecond)
+	}
+	if len(second.Models) != 1 || second.Models[0].Alias != "second-alias" {
+		t.Fatalf("unexpected reloaded preview: %+v", second.Models)
+	}
+
+	before, errRead := os.ReadFile(configPath)
+	if errRead != nil {
+		t.Fatal(errRead)
+	}
+	writeOverrides("regex_overrides:\n  - pattern: '('\n")
+	if _, errRun := manager.Run(context.Background(), true, true); errRun == nil {
+		t.Fatal("invalid external overrides unexpectedly succeeded")
+	}
+	after, errRead := os.ReadFile(configPath)
+	if errRead != nil {
+		t.Fatal(errRead)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("CPA configuration changed after invalid external overrides")
+	}
 }
